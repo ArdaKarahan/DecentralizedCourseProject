@@ -1,4 +1,4 @@
-module multi_sig::multisig;
+module multi_sig::multisigv0;
 
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
