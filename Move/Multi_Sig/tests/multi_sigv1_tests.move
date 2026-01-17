@@ -330,15 +330,22 @@ fun test_v1_executes_after_expiry() {
     // Advance clock to 23:59 (just before expiry)
     clock::increment_for_testing(&mut clock, 86399000);
 
-    // BOB votes at 23:59 - proposal passes threshold
+    // ALICE votes
+    {
+        ts::next_tx(&mut scenario, ALICE);
+        let wallet = ts::take_shared<MultisigWallet>(&scenario);
+        let mut proposal = ts::take_shared<Proposal>(&scenario);
+        multisigv1::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
+        ts::return_shared(wallet);
+        ts::return_shared(proposal);
+    };
+
+    // BOB votes
     {
         ts::next_tx(&mut scenario, BOB);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let mut proposal = ts::take_shared<Proposal>(&scenario);
-
-        // Vote succeeds - still within time limit
         multisigv1::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
-
         ts::return_shared(wallet);
         ts::return_shared(proposal);
     };
@@ -504,6 +511,14 @@ fun test_v1_snapshot_security_works() {
         );
         ts::return_shared(wallet);
     };
+    
+    let proposal1_id = {
+        ts::next_tx(&mut scenario, ALICE);
+        let proposal = ts::take_shared<Proposal>(&scenario);
+        let id = object::id(&proposal);
+        ts::return_shared(proposal);
+        id
+    };
 
     // Proposal 2: Remove CHARLIE
     {
@@ -519,6 +534,14 @@ fun test_v1_snapshot_security_works() {
         );
         ts::return_shared(wallet);
     };
+    
+    let proposal2_id = {
+        ts::next_tx(&mut scenario, BOB);
+        let proposal = ts::take_shared<Proposal>(&scenario);
+        let id = object::id(&proposal);
+        ts::return_shared(proposal);
+        id
+    };
 
     // Execute Proposal 2 first (remove CHARLIE)
     {
@@ -526,7 +549,7 @@ fun test_v1_snapshot_security_works() {
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let mut proposal = ts::take_shared_by_id<Proposal>(
             &scenario,
-            option::destroy_some(ts::most_recent_id_for_address<Proposal>(BOB)),
+            proposal2_id,
         );
         multisigv1::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
         ts::return_shared(wallet);
@@ -538,7 +561,7 @@ fun test_v1_snapshot_security_works() {
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let mut proposal = ts::take_shared_by_id<Proposal>(
             &scenario,
-            option::destroy_some(ts::most_recent_id_for_address<Proposal>(BOB)),
+            proposal2_id,
         );
         multisigv1::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
         ts::return_shared(wallet);
@@ -550,7 +573,7 @@ fun test_v1_snapshot_security_works() {
         let mut wallet = ts::take_shared<MultisigWallet>(&scenario);
         let mut proposal = ts::take_shared_by_id<Proposal>(
             &scenario,
-            option::destroy_some(ts::most_recent_id_for_address<Proposal>(BOB)),
+            proposal2_id,
         );
         multisigv1::execute_proposal(&mut wallet, &mut proposal, &clock, ts::ctx(&mut scenario));
 
@@ -568,7 +591,7 @@ fun test_v1_snapshot_security_works() {
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let mut proposal = ts::take_shared_by_id<Proposal>(
             &scenario,
-            option::destroy_some(ts::most_recent_id_for_address<Proposal>(ALICE)),
+            proposal1_id,
         );
 
         // CHARLIE is in the snapshot, even though removed from wallet

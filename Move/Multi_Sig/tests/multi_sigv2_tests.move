@@ -37,7 +37,7 @@ fun create_test_clock(scenario: &mut Scenario): Clock {
 // FIX 1: Last Owner Removal Protection
 // ========================================
 #[test]
-#[expected_failure(abort_code = ECannotRemoveLastOwner)]
+#[expected_failure(abort_code = ECannotRemoveLastOwner, location = multi_sig::multisigv2)]
 fun test_v2_cannot_remove_last_owner() {
     let mut scenario = ts::begin(ALICE);
 
@@ -147,7 +147,7 @@ fun test_v2_cannot_remove_last_owner() {
 // FIX 2: Duplicate Owner Prevention
 // ========================================
 #[test]
-#[expected_failure(abort_code = EDuplicateOwner)]
+#[expected_failure(abort_code = EDuplicateOwner, location = multi_sig::multisigv2)]
 fun test_v2_prevents_duplicate_owners() {
     let mut scenario = ts::begin(ALICE);
 
@@ -164,7 +164,7 @@ fun test_v2_prevents_duplicate_owners() {
 }
 
 #[test]
-#[expected_failure(abort_code = EDuplicateOwner)]
+#[expected_failure(abort_code = EDuplicateOwner, location = multi_sig::multisigv2)]
 fun test_v2_prevents_duplicate_owners_different_positions() {
     let mut scenario = ts::begin(ALICE);
 
@@ -183,7 +183,7 @@ fun test_v2_prevents_duplicate_owners_different_positions() {
 // FIX 3: Insufficient Balance Protection
 // ========================================
 #[test]
-#[expected_failure(abort_code = EInsufficientBalance)]
+#[expected_failure(abort_code = EInsufficientBalance, location = multi_sig::multisigv2)]
 fun test_v2_checks_balance_before_execution() {
     let mut scenario = ts::begin(ALICE);
 
@@ -261,7 +261,7 @@ fun test_v2_checks_balance_before_execution() {
 // FIX 4: Expiry Double-Check Protection
 // ========================================
 #[test]
-#[expected_failure(abort_code = EProposalExpired)]
+#[expected_failure(abort_code = EProposalExpired, location = multi_sig::multisigv2)]
 fun test_v2_checks_expiry_during_execution() {
     let mut scenario = ts::begin(ALICE);
 
@@ -771,7 +771,7 @@ fun test_v2_plurality_voting_success() {
 }
 
 #[test]
-#[expected_failure(abort_code = EThresholdNotMet)]
+#[expected_failure(abort_code = EThresholdNotMet, location = multi_sig::multisigv2)]
 fun test_v2_plurality_voting_fail() {
     let mut scenario = ts::begin(ALICE);
     // 1. Create wallet with 3 owners (plurality)
@@ -826,7 +826,7 @@ fun test_v2_plurality_voting_fail() {
 // EDGE CASE: Double Voting
 // ========================================
 #[test]
-#[expected_failure(abort_code = EAlreadyVoted)]
+#[expected_failure(abort_code = EAlreadyVoted, location = multi_sig::multisigv2)]
 fun test_v2_cannot_vote_twice() {
     let mut scenario = ts::begin(ALICE);
 
@@ -905,7 +905,14 @@ fun test_v2_snapshot_security_works() {
         );
         ts::return_shared(wallet);
     };
-    let proposal1_id = ts::most_recent_id_for_address<Proposal>(ALICE);
+    
+    let proposal1_id = {
+        ts::next_tx(&mut scenario, ALICE);
+        let proposal = ts::take_shared<Proposal>(&scenario);
+        let id = object::id(&proposal);
+        ts::return_shared(proposal);
+        id
+    };
 
 
     // 3. BOB creates proposal 2 to remove CHARLIE.
@@ -922,13 +929,20 @@ fun test_v2_snapshot_security_works() {
         );
         ts::return_shared(wallet);
     };
-    let proposal2_id = ts::most_recent_id_for_address<Proposal>(BOB);
+    
+    let proposal2_id = {
+        ts::next_tx(&mut scenario, BOB);
+        let proposal = ts::take_shared<Proposal>(&scenario);
+        let id = object::id(&proposal);
+        ts::return_shared(proposal);
+        id
+    };
 
     // Vote to remove CHARLIE
     {
         ts::next_tx(&mut scenario, ALICE);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
-        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, option::destroy_some(proposal2_id));
+        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, proposal2_id);
         multisigv2::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
         ts::return_shared(wallet);
         ts::return_shared(proposal);
@@ -936,7 +950,7 @@ fun test_v2_snapshot_security_works() {
     {
         ts::next_tx(&mut scenario, BOB);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
-        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, option::destroy_some(proposal2_id));
+        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, proposal2_id);
         multisigv2::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario));
         ts::return_shared(wallet);
         ts::return_shared(proposal);
@@ -945,7 +959,7 @@ fun test_v2_snapshot_security_works() {
     {
         ts::next_tx(&mut scenario, ALICE);
         let mut wallet = ts::take_shared<MultisigWallet>(&scenario);
-        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, option::destroy_some(proposal2_id));
+        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, proposal2_id);
         multisigv2::execute_proposal(&mut wallet, &mut proposal, &clock, ts::ctx(&mut scenario));
         ts::return_shared(wallet);
         ts::return_shared(proposal);
@@ -956,7 +970,7 @@ fun test_v2_snapshot_security_works() {
     {
         ts::next_tx(&mut scenario, CHARLIE);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
-        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, option::destroy_some(proposal1_id));
+        let mut proposal = ts::take_shared_by_id<Proposal>(&scenario, proposal1_id);
         multisigv2::vote(&wallet, &mut proposal, true, &clock, ts::ctx(&mut scenario)); // Should succeed
         ts::return_shared(wallet);
         ts::return_shared(proposal);
@@ -1026,6 +1040,7 @@ fun test_v2_add_existing_owner_silent_success() {
 
     // 4. Check owners are still just [ALICE, BOB]
     {
+        ts::next_tx(&mut scenario, ALICE);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let owners = multisigv2::get_wallet_owners(&wallet);
         assert!(vector::length(&owners) == 2, 0);
@@ -1093,6 +1108,7 @@ fun test_v2_remove_nonexistent_owner_silent_success() {
 
     // 4. Check owners are still just [ALICE, BOB]
     {
+        ts::next_tx(&mut scenario, ALICE);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let owners = multisigv2::get_wallet_owners(&wallet);
         assert!(vector::length(&owners) == 2, 0);
@@ -1151,6 +1167,7 @@ fun test_v2_getter_functions() {
 
     // 2. Test all getter functions
     {
+        ts::next_tx(&mut scenario, ALICE);
         let wallet = ts::take_shared<MultisigWallet>(&scenario);
         let proposal = ts::take_shared<Proposal>(&scenario);
 
