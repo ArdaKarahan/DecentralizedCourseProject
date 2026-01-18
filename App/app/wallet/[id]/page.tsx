@@ -11,7 +11,6 @@ import { CreateProposalModal } from "../../../components/wallet/CreateProposalMo
 import clsx from "clsx";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 export default function WalletPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -20,7 +19,7 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // 1. Fetch Wallet Object
-  const { data: wallet, isLoading: walletLoading } = useQuery({
+  const { data: wallet, isLoading: walletLoading, refetch: refetchWallet } = useQuery({
     queryKey: ["wallet", id],
     queryFn: async () => {
       const res = await client.getObject({
@@ -35,19 +34,26 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
   const { data: creationEvent, isLoading: eventLoading } = useQuery({
     queryKey: ["wallet-creation-event", id],
     queryFn: async () => {
-      // In a real app, you'd want an indexer. Here we scan recent events.
+      // Robust strategy: Fetch module events -> Client-side filter
       let cursor = null;
       let hasNextPage = true;
       
       while (hasNextPage) {
         const events = await client.queryEvents({
-          query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAME}::WalletCreated` },
+          query: { 
+            MoveModule: { package: PACKAGE_ID, module: MODULE_NAME } 
+          },
           order: "descending",
           limit: 50,
           cursor,
         });
 
-        const found = events.data.find((e) => (e.parsedJson as any)?.wallet_id === id);
+        // Client-side filter for specific event type and wallet ID
+        const found = events.data.find((e) => 
+          e.type === `${PACKAGE_ID}::${MODULE_NAME}::WalletCreated` &&
+          (e.parsedJson as any)?.wallet_id === id
+        );
+        
         if (found) return found;
 
         cursor = events.nextCursor;
@@ -62,19 +68,22 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
   const { data: proposals, isLoading: proposalsLoading, refetch: refetchProposals } = useQuery({
     queryKey: ["wallet-proposals", id],
     queryFn: async () => {
-      // 3a. Find ProposalCreated events for this wallet
-      let allProposalIds: string[] = [];
-      let cursor = null;
-      let hasNextPage = true;
-
-      // Scan recent 100 events for demo
+      // Robust strategy: Fetch module events -> Client-side filter
       const events = await client.queryEvents({
-                  query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAME}::ProposalCreated` },        order: "descending",
+        query: { 
+          MoveModule: { package: PACKAGE_ID, module: MODULE_NAME } 
+        },
+        order: "descending",
         limit: 50,
       });
 
-      const relevantEvents = events.data.filter((e) => (e.parsedJson as any)?.wallet_id === id);
-      allProposalIds = relevantEvents.map((e) => (e.parsedJson as any)?.proposal_id);
+      // Filter for ProposalCreated events belonging to this wallet
+      const relevantEvents = events.data.filter((e) => 
+        e.type === `${PACKAGE_ID}::${MODULE_NAME}::ProposalCreated` &&
+        (e.parsedJson as any)?.wallet_id === id
+      );
+
+      const allProposalIds = relevantEvents.map((e) => (e.parsedJson as any)?.proposal_id);
 
       if (allProposalIds.length === 0) return [];
 
@@ -153,14 +162,15 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
           <WalletDetails 
             wallet={wallet} 
             creationEvent={creationEvent} 
-            proposalCount={proposals?.length || 0} 
+            proposalCount={proposals?.length || 0}
+            refetch={refetchWallet}
           />
         )}
         {activeTab === "proposals" && (
           <WalletProposals 
             proposals={proposals || []} 
             walletId={id} 
-            refetch={refetchProposals} 
+            refetch={() => { refetchProposals(); refetchWallet(); }}
           />
         )}
         {activeTab === "stats" && (

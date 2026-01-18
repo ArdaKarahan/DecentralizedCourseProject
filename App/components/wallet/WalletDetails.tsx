@@ -1,12 +1,21 @@
-import { ExternalLink, Calendar, Users, FileText, Hash } from "lucide-react";
+import { ExternalLink, Calendar, Users, FileText, Hash, ArrowDownCircle } from "lucide-react";
+import { useState } from "react";
+import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { PACKAGE_ID, MODULE_NAME } from "../../utils/constants";
 
 interface WalletDetailsProps {
   wallet: any;
   creationEvent: any;
   proposalCount: number;
+  refetch: () => void;
 }
 
-export function WalletDetails({ wallet, creationEvent, proposalCount }: WalletDetailsProps) {
+export function WalletDetails({ wallet, creationEvent, proposalCount, refetch }: WalletDetailsProps) {
+  const [depositAmount, setDepositAmount] = useState("");
+  const [isDepositing, setIsDepositing] = useState(false);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
   const creationDate = creationEvent 
     ? new Date(Number(creationEvent.timestampMs)).toLocaleDateString(undefined, {
         year: 'numeric',
@@ -19,6 +28,44 @@ export function WalletDetails({ wallet, creationEvent, proposalCount }: WalletDe
 
   const creator = creationEvent?.sender || "Unknown";
   const txHash = creationEvent?.id?.txDigest || "Unknown";
+  const walletId = wallet?.objectId;
+
+  const handleDeposit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositAmount || isNaN(Number(depositAmount))) return;
+    
+    setIsDepositing(true);
+    const tx = new Transaction();
+    
+    // Amount in MIST
+    const amountMist = BigInt(Math.floor(parseFloat(depositAmount) * 1_000_000_000));
+    const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountMist)]);
+    
+    tx.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAME}::deposit`,
+      arguments: [
+        tx.object(walletId),
+        coin,
+      ],
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: () => {
+          alert("Deposit Successful!");
+          setDepositAmount("");
+          setIsDepositing(false);
+          refetch();
+        },
+        onError: (err) => {
+          console.error(err);
+          alert("Deposit Failed");
+          setIsDepositing(false);
+        }
+      }
+    );
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -31,6 +78,19 @@ export function WalletDetails({ wallet, creationEvent, proposalCount }: WalletDe
           </h3>
           
           <div className="space-y-4">
+             <div className="flex justify-between items-center py-2 border-b border-gray-800">
+              <span className="text-gray-400 flex items-center gap-2"><Hash size={16}/> Wallet Address</span>
+              <a 
+                href={`https://testnet.suivision.xyz/object/${walletId}`} 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-neon-blue hover:underline font-mono text-sm flex items-center gap-1"
+              >
+                {walletId ? `${walletId.slice(0, 8)}...${walletId.slice(-8)}` : "Loading..."}
+                <ExternalLink size={12} />
+              </a>
+            </div>
+
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 flex items-center gap-2"><Calendar size={16}/> Created On</span>
               <span className="text-white font-mono">{creationDate}</span>
@@ -44,7 +104,7 @@ export function WalletDetails({ wallet, creationEvent, proposalCount }: WalletDe
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 flex items-center gap-2"><Hash size={16}/> Transaction</span>
               <a 
-                href={`https://suiscan.xyz/testnet/tx/${txHash}`} 
+                href={`https://testnet.suivision.xyz/tx/${txHash}`} 
                 target="_blank" 
                 rel="noreferrer"
                 className="text-neon-blue hover:underline font-mono text-sm flex items-center gap-1"
@@ -63,6 +123,29 @@ export function WalletDetails({ wallet, creationEvent, proposalCount }: WalletDe
               <span className="text-white font-bold text-xl">{(Number(wallet?.content?.fields?.balance || 0) / 1_000_000_000).toFixed(4)} SUI</span>
             </div>
           </div>
+
+          {/* Deposit Form */}
+          <form onSubmit={handleDeposit} className="pt-4 mt-4 border-t border-gray-700">
+            <p className="text-sm text-gray-400 mb-2 font-bold uppercase">Deposit SUI</p>
+            <div className="flex gap-2">
+              <input 
+                type="number" 
+                step="any"
+                min="0"
+                placeholder="Amount (SUI)"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                className="flex-1 bg-black/50 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-neon-pink text-sm"
+              />
+              <button 
+                type="submit"
+                disabled={isDepositing || !depositAmount}
+                className="bg-neon-pink/20 text-neon-pink border border-neon-pink px-4 py-2 rounded-lg hover:bg-neon-pink/40 disabled:opacity-50 font-bold text-sm flex items-center gap-2"
+              >
+                {isDepositing ? "..." : <><ArrowDownCircle size={16}/> Deposit</>}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Owners Card */}

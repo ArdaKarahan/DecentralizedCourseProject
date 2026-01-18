@@ -29,13 +29,9 @@ export default function MyWallets() {
         order: "descending",
       });
 
-      // 2. Filter events where user was an initial owner
+      // 2. Extract all wallet IDs (don't filter by initial owner yet)
       const relevantWalletIds = events.data
-        .filter((e) => {
-          // @ts-ignore
-          const owners = e.parsedJson?.owners as string[] || [];
-          return owners.some(o => o === account.address);
-        })
+        .filter((e) => e.type === `${PACKAGE_ID}::${MODULE_NAME}::WalletCreated`)
         // @ts-ignore
         .map((e) => e.parsedJson?.wallet_id as string);
 
@@ -93,6 +89,7 @@ export default function MyWallets() {
   }
 
   if (error) {
+    console.error("Error loading wallets:", error);
     return (
       <div className="flex justify-center items-center h-[50vh]">
         <p className="text-red-500">Error loading wallets. Please try again.</p>

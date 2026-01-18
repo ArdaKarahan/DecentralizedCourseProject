@@ -414,7 +414,69 @@ The `voters: VecSet<address>` field is **publicly readable** on-chain. Our speci
 
 ---
 
-## 📊 Feature Comparison Matrix
+### v3: Frontend Foundation - Basic Integration
+
+**Purpose**: Initial React/Next.js frontend to interact with the v2 smart contracts.
+
+#### Core Functionality
+
+- **Wallet Connection**: Integrated `@mysten/dapp-kit` for wallet connectivity.
+- **Dashboard**: "My Wallets" page fetching `WalletCreated` events to display user's wallets.
+  - _Limitation_: Only showed wallets where the user was an _initial_ owner.
+- **Wallet Details**: Basic view showing balance, owner list, and proposal history.
+- **Proposal Creation**: Simple modal to create proposals (Send SUI, Add/Remove Owner).
+  - _Limitation_: Inputs required raw MIST values (e.g., 1000000000 for 1 SUI).
+  - _Limitation_: Expiry required manual date picking.
+- **Voting Interface**: Basic Approve/Reject buttons.
+
+#### Status
+
+✅ **Functional**: Core contract interactions worked.
+⚠️ **UX Gaps**: Manual unit conversion, no funding mechanism within the app, rigid event filtering.
+
+---
+
+### v4: Frontend Polish - Robustness & UX
+
+**Purpose**: Address usability friction points and ensure robust data fetching across network conditions.
+
+#### 1. Dynamic Ownership Visibility 👥
+
+**Problem**: Owners added _after_ wallet creation couldn't see the wallet in their dashboard because the app only filtered immutable `WalletCreated` events.
+**Fix**: Updated logic to fetch all wallet objects and filter by the _live_ `owners` field. Now, added owners instantly see the wallet in "My Wallets".
+
+#### 2. Native Deposit Feature 💰
+
+**Problem**: Users had to use external wallets/CLIs to fund the multisig to pay for proposals.
+**Fix**: Added a "Deposit SUI" action directly in the Wallet Details UI, allowing instant top-ups.
+
+#### 3. Human-Centric UX 💎
+
+**Improvements**:
+
+- **Smart Units**: Inputs now accept SUI (e.g., "1.5") and auto-convert to MIST.
+- **Relative Expiry**: Replaced date pickers with a duration selector (Days/Hours/Min/Sec) for easy "10-minute" proposals.
+- **Input Safety**: Prevented negative values and scientific notation display errors.
+
+#### 4. Robust Event Architecture 📡
+
+**Problem**: Fetching specific event types (`MoveEvent`) caused crashes on some RPC nodes or when encountering unrelated events.
+**Fix**: Switched to a robust "Fetch Module + Client Filter" strategy. The app fetches `MoveModule` events and safely filters for `WalletCreated` or `ProposalCreated` types in client-side code, preventing "undefined" crashes.
+
+#### 5. Real-Time Status Engine 🔄
+
+**Feature**: The frontend now calculates "Effective Status" in real-time.
+
+- If a proposal is pending on-chain but the expiry time has passed, the UI **immediately** shows it as "Expired" and disables voting/execution.
+- Statistics charts reflect this effective status, ensuring expired proposals don't clutter "On-going" metrics.
+
+#### 6. Ecosystem Integration 🔗
+
+**Update**: Replaced generic explorer links with `testnet.suivision.xyz` deep links for Objects and Transactions, ensuring users see the correct network history.
+
+---
+
+## 📊 Feature Comparison Matrix of Smart Contracts
 
 | Feature                  | v0       | v1           | v2                |
 | ------------------------ | -------- | ------------ | ----------------- |
@@ -445,6 +507,21 @@ The `voters: VecSet<address>` field is **publicly readable** on-chain. Our speci
 
 ---
 
+## 📊 Feature Comparison Matrix of Front-End
+
+| Feature                | v3 (Initial FE)    | v4 (Polished FE) |
+| ---------------------- | ------------------ | ---------------- |
+| **Governance**         | Basic UI           | Dynamic          |
+| **Snapshot Voting**    | ✅                 | ✅               |
+| **Relative Expiry**    | ❌ (Date Picker)   | ✅ (Countdown)   |
+| **Human-Readable SUI** | ❌ (MIST)          | ✅ (Auto MIST)   |
+| **Dynamic Visibility** | ❌ (Creators Only) | ✅ (All Owners)  |
+| **Explorer Links**     | (Broken/Main)      | (SuiVision Test) |
+| **Status Engine**      | Raw Chain Data     | Client-Sync      |
+| **Event Strategy**     | Basic Filter       | Hybrid Robust    |
+
+---
+
 ## 🎓 Academic Contributions
 
 This project demonstrates advanced Sui Move concepts suitable for a Distributed Systems course:
@@ -460,7 +537,7 @@ This project demonstrates advanced Sui Move concepts suitable for a Distributed 
 
 ## 🚀 Next Steps (Future Versions)
 
-Potential enhancements for v3+:
+Potential enhancements for v5+:
 
 - **Weighted Voting**: Owners have different voting power
 - **Proposal Delegation**: Owner A can authorize Owner B to vote on their behalf
@@ -487,6 +564,7 @@ Developed as part of a Distributed Systems course project. Security improvements
 
 - **Sui Foundation**: For excellent Move documentation
 - **Claude AI**: For security audit and architectural recommendations
+- **Gemini AI**: For frontend debugging, UX optimization, and full-stack integration support
 - **Mysten Labs**: For dapp-kit and developer tools
 - **Course Instructor**: For the challenging project constraints
 

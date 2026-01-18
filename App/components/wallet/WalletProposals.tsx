@@ -28,8 +28,19 @@ export function WalletProposals({ proposals, walletId, refetch }: WalletProposal
 
   const filteredProposals = proposals.filter((p) => {
     const fields = p.data.content.fields;
+    let status = fields.status;
+
+    // Calculate effective status (Client-side Expiry)
+    const expiryMsVal = fields.expiry_ms?.fields?.contents || fields.expiry_ms;
+    const expiryMs = expiryMsVal ? Number(expiryMsVal) : null;
+    const isExpired = status === STATUS_PENDING && expiryMs && Date.now() > expiryMs;
+
+    if (isExpired) {
+      status = STATUS_EXPIRED;
+    }
+
     const actionMatch = filterAction === null || fields.action_type === filterAction;
-    const statusMatch = filterStatus === null || fields.status === filterStatus;
+    const statusMatch = filterStatus === null || status === filterStatus;
     return actionMatch && statusMatch;
   });
 
@@ -108,7 +119,17 @@ function ProposalItem({ proposal, walletId, refetch }: { proposal: Proposal, wal
   const account = useCurrentAccount();
 
   const fields = proposal.data.content.fields;
-  const status = fields.status;
+  let status = fields.status;
+  
+  // Calculate client-side expiry
+  const expiryMsVal = fields.expiry_ms?.fields?.contents || fields.expiry_ms;
+  const expiryMs = expiryMsVal ? Number(expiryMsVal) : null;
+  const isExpired = status === STATUS_PENDING && expiryMs && Date.now() > expiryMs;
+
+  if (isExpired) {
+    status = STATUS_EXPIRED;
+  }
+
   const actionType = fields.action_type;
   const statusLabel = STATUS_LABELS[status as keyof typeof STATUS_LABELS];
   const actionLabel = ACTION_LABELS[actionType as keyof typeof ACTION_LABELS];
@@ -119,7 +140,7 @@ function ProposalItem({ proposal, walletId, refetch }: { proposal: Proposal, wal
   const rejectionCount = Number(fields.rejection_count);
   const voters = fields.voters?.fields?.contents || []; // VecSet
   const snapshotOwners = fields.snapshot_owners || [];
-  const expiry = fields.expiry_ms ? new Date(Number(fields.expiry_ms?.fields?.contents || fields.expiry_ms)).toLocaleString() : "No Expiry";
+  const expiryDateStr = expiryMs ? new Date(expiryMs).toLocaleString() : "No Expiry";
 
   // Colors based on status
   const statusColor = 
@@ -158,12 +179,22 @@ function ProposalItem({ proposal, walletId, refetch }: { proposal: Proposal, wal
         tx.object("0x6"), // Clock
       ],
     });
-    signAndExecute({ transaction: tx }, { onSuccess: () => { alert("Executed!"); refetch(); }, onError: (e) => console.error(e) });
+    signAndExecute(
+      { transaction: tx }, 
+      { 
+        onSuccess: () => { alert("Executed!"); refetch(); }, 
+        onError: (e) => {
+          console.error(e);
+          // @ts-ignore
+          alert(`Execution Failed: ${e.message || "Unknown error"}`);
+        } 
+      }
+    );
   };
 
-  const canVote = status === STATUS_PENDING && account && snapshotOwners.includes(account.address) && !voters.includes(account.address);
+  const canVote = !isExpired && status === STATUS_PENDING && account && snapshotOwners.includes(account.address) && !voters.includes(account.address);
   // Simple check for execution availability (could be more robust with threshold check, but contract handles it)
-  const canExecute = status === STATUS_PENDING; 
+  const canExecute = !isExpired && status === STATUS_PENDING; 
 
   return (
     <div 
@@ -210,7 +241,9 @@ function ProposalItem({ proposal, walletId, refetch }: { proposal: Proposal, wal
                   <span className="text-xl font-bold">{rejectionCount}</span> Rejected
                 </div>
               </div>
-              <p className="text-xs text-gray-500">Expiry: {expiry}</p>
+              <p className={clsx("text-xs", isExpired ? "text-neon-orange font-bold" : "text-gray-500")}>
+                Expiry: {expiryDateStr}
+              </p>
             </div>
           </div>
 

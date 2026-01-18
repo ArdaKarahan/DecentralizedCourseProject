@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Clock } from "lucide-react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { 
@@ -24,6 +24,13 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
   const [actionType, setActionType] = useState(ACTION_SEND_SUI);
   const [target, setTarget] = useState("");
   const [amount, setAmount] = useState("");
+  
+  // Duration State
+  const [days, setDays] = useState("0");
+  const [hours, setHours] = useState("0");
+  const [minutes, setMinutes] = useState("0");
+  const [seconds, setSeconds] = useState("0");
+  
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -34,8 +41,17 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
     
     // Convert Amount to MIST if sending SUI
     const amountMist = actionType === ACTION_SEND_SUI 
-      ? BigInt(parseFloat(amount) * 1_000_000_000) 
+      ? BigInt(Math.floor(parseFloat(amount) * 1_000_000_000)) 
       : BigInt(0);
+
+    // Calculate Expiry Ms from duration
+    const totalSeconds = 
+      (parseInt(days) || 0) * 86400 + 
+      (parseInt(hours) || 0) * 3600 + 
+      (parseInt(minutes) || 0) * 60 + 
+      (parseInt(seconds) || 0);
+    
+    const expiryMs = totalSeconds > 0 ? Date.now() + (totalSeconds * 1000) : null;
 
     tx.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAME}::create_proposal`,
@@ -44,7 +60,7 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
         tx.pure.u8(actionType),
         tx.pure.address(target),
         tx.pure.u64(amountMist),
-        tx.pure.option("u64", null), // No expiry for simplicity in this demo
+        tx.pure.option("u64", expiryMs),
       ],
     });
 
@@ -54,6 +70,12 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
         onSuccess: () => {
           alert("Proposal Created!");
           setLoading(false);
+          setAmount("");
+          setTarget("");
+          setDays("0");
+          setHours("0");
+          setMinutes("0");
+          setSeconds("0");
           refetch();
           onClose();
         },
@@ -122,7 +144,8 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
               <label className="text-sm text-gray-400">Amount (SUI)</label>
               <input 
                 type="number" 
-                step="0.000000001"
+                step="any"
+                min="0"
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -131,6 +154,31 @@ export function CreateProposalModal({ isOpen, onClose, walletId, refetch }: Crea
               />
             </div>
           )}
+
+          <div className="space-y-2">
+             <label className="text-sm text-gray-400 flex items-center gap-2">
+               <Clock size={14} /> Expiry Duration (Relative)
+             </label>
+             <div className="grid grid-cols-4 gap-2">
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 uppercase text-center">Days</p>
+                  <input type="number" min="0" value={days} onChange={e => setDays(e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-2 text-white text-center text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 uppercase text-center">Hrs</p>
+                  <input type="number" min="0" value={hours} onChange={e => setHours(e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-2 text-white text-center text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 uppercase text-center">Min</p>
+                  <input type="number" min="0" value={minutes} onChange={e => setMinutes(e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-2 text-white text-center text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 uppercase text-center">Sec</p>
+                  <input type="number" min="0" value={seconds} onChange={e => setSeconds(e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-2 text-white text-center text-sm" />
+                </div>
+             </div>
+             <p className="text-[10px] text-gray-500 italic">Leaves blank or set all to 0 for no expiry.</p>
+          </div>
 
           <button
             type="submit"

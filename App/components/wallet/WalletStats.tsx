@@ -14,7 +14,18 @@ export function WalletStats({ proposals }: WalletStatsProps) {
   // 1. Wallet Activity Data
   const total = proposals.length;
   const statusCounts = proposals.reduce((acc, p) => {
-    const status = p.data.content.fields.status;
+    const fields = p.data.content.fields;
+    let status = fields.status;
+
+    // Calculate effective status (Client-side Expiry)
+    const expiryMsVal = fields.expiry_ms?.fields?.contents || fields.expiry_ms;
+    const expiryMs = expiryMsVal ? Number(expiryMsVal) : null;
+    const isExpired = status === STATUS_PENDING && expiryMs && Date.now() > expiryMs;
+
+    if (isExpired) {
+      status = STATUS_EXPIRED;
+    }
+
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {} as Record<number, number>);
