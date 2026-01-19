@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
-import { useSuiClient } from "@mysten/dapp-kit";
+import { use, useState, useEffect } from "react";
+import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import { useQuery } from "@tanstack/react-query";
 import { PACKAGE_ID, MODULE_NAME } from "../../../utils/constants";
 import { WalletDetails } from "../../../components/wallet/WalletDetails";
@@ -11,16 +11,26 @@ import { CreateProposalModal } from "../../../components/wallet/CreateProposalMo
 import clsx from "clsx";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function WalletPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const client = useSuiClient();
+  const account = useCurrentAccount();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"details" | "proposals" | "stats">("details");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Redirect to my-wallets if disconnected
+  useEffect(() => {
+    if (!account) {
+      router.push("/my-wallets");
+    }
+  }, [account, router]);
+
   // 1. Fetch Wallet Object
   const { data: wallet, isLoading: walletLoading, refetch: refetchWallet } = useQuery({
-    queryKey: ["wallet", id],
+    queryKey: ["wallet", id, account?.address],
     queryFn: async () => {
       const res = await client.getObject({
         id,
@@ -28,11 +38,12 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
       });
       return res.data;
     },
+    enabled: !!account,
   });
 
   // 2. Fetch WalletCreated Event (for metadata)
   const { data: creationEvent, isLoading: eventLoading } = useQuery({
-    queryKey: ["wallet-creation-event", id],
+    queryKey: ["wallet-creation-event", id, account?.address],
     queryFn: async () => {
       // Robust strategy: Fetch module events -> Client-side filter
       let cursor = null;
@@ -62,11 +73,12 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
       }
       return null;
     },
+    enabled: !!account,
   });
 
   // 3. Fetch Proposals
   const { data: proposals, isLoading: proposalsLoading, refetch: refetchProposals } = useQuery({
-    queryKey: ["wallet-proposals", id],
+    queryKey: ["wallet-proposals", id, account?.address],
     queryFn: async () => {
       // Robust strategy: Fetch module events -> Client-side filter
       const events = await client.queryEvents({
@@ -98,7 +110,17 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
         data: obj.data!,
       }));
     },
+    enabled: !!account,
   });
+
+  if (!account) {
+    return (
+      <div className="flex justify-center items-center h-[50vh] flex-col gap-4">
+        <Loader2 className="w-8 h-8 text-neon-pink animate-spin" />
+        <p className="text-xl text-gray-400">Redirecting...</p>
+      </div>
+    );
+  }
 
   const isLoading = walletLoading || eventLoading || proposalsLoading;
 
@@ -157,7 +179,7 @@ export default function WalletPage({ params }: { params: Promise<{ id: string }>
       </div>
 
       {/* Content */}
-      <div className="min-h-[400px]">
+      <div className="min-h-[400px]" key={account?.address}>
         {activeTab === "details" && (
           <WalletDetails 
             wallet={wallet} 

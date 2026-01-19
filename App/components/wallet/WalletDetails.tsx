@@ -104,7 +104,7 @@ export function WalletDetails({ wallet, creationEvent, proposalCount, refetch }:
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 flex items-center gap-2"><Hash size={16}/> Transaction</span>
               <a 
-                href={`https://testnet.suivision.xyz/tx/${txHash}`} 
+                href={`https://testnet.suivision.xyz/txblock/${txHash}`} 
                 target="_blank" 
                 rel="noreferrer"
                 className="text-neon-blue hover:underline font-mono text-sm flex items-center gap-1"
